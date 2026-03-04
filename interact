@@ -21,21 +21,21 @@ Options:
   -q, --queue QUEUE     queue to submit to (default: $DEFAULT_QUEUE)
       --name NAME       job name (default: $JOB_NAME)
       --rpn NUM         max replicas per node (default: $RPN)
-      --help            display this help and exit
+  -h, --help            display this help and exit
       --version         output version information and exit
 
 Examples:
   interact-job                       # 1 node on $DEFAULT_QUEUE
   interact-job -n 2                  # 2 nodes on $DEFAULT_QUEUE
   interact-job -q q_gpu              # 1 node on q_gpu
-  interact-job -n 4 -q q_large      # 4 nodes on q_large
+  interact-job -n 4 -q q_large       # 4 nodes on q_large
 EOF
 }
 
 NODES=$DEFAULT_NODES
 QUEUE=$DEFAULT_QUEUE
 
-OPTS=$(getopt -o n:q: --long nodes:,queue:,name:,rpn:,help,version -n "$(basename "$0")" -- "$@") || {
+OPTS=$(getopt -o n:q:h --long nodes:,queue:,name:,rpn:,help,version -n "$(basename "$0")" -- "$@") || {
     echo "Try '$(basename "$0") --help' for more information." >&2
     exit 1
 }
@@ -47,7 +47,7 @@ while true; do
         -q|--queue)   QUEUE="$2";    shift 2 ;;
         --name)       JOB_NAME="$2"; shift 2 ;;
         --rpn)        RPN="$2";      shift 2 ;;
-        --help)       usage; exit 0 ;;
+        -h|--help)    usage; exit 0 ;;
         --version)
             echo "interact-job $VERSION"
             echo ""
