@@ -7,6 +7,7 @@
 VERSION="1.0.0"
 DEFAULT_QUEUE="q_genuser"
 DEFAULT_NODES=1
+DEFAULT_WALLTIME="24:00:00"
 JOB_NAME="interQX"
 RPN=608
 
@@ -17,25 +18,46 @@ Usage: interact [OPTION]...
 Apply for an interactive job on the cluster via DonauKit (dsub).
 
 Options:
-  -n, --nodes NUM       number of nodes to request (default: $DEFAULT_NODES)
-  -q, --queue QUEUE     queue to submit to (default: $DEFAULT_QUEUE)
-      --name NAME       job name (default: $JOB_NAME)
-      --rpn NUM         max replicas per node (default: $RPN)
-  -h, --help            display this help and exit
-      --version         output version information and exit
+  -n, --nodes NUM           number of nodes to request (default: $DEFAULT_NODES)
+  -q, --queue QUEUE         queue to submit to (default: $DEFAULT_QUEUE)
+  -w, --walltime [DD:]HH:MM:SS   wall-clock time limit (default: $DEFAULT_WALLTIME)
+      --name NAME           job name (default: $JOB_NAME)
+      --rpn NUM             max replicas per node (default: $RPN)
+  -h, --help                display this help and exit
+      --version             output version information and exit
 
 Examples:
-  interact                       # 1 node on $DEFAULT_QUEUE
-  interact -n 2                  # 2 nodes on $DEFAULT_QUEUE
-  interact -q q_gpu              # 1 node on q_gpu
-  interact -n 4 -q q_large       # 4 nodes on q_large
+  interact                           # 1 node, 24h on $DEFAULT_QUEUE
+  interact -n 2                      # 2 nodes, 24h on $DEFAULT_QUEUE
+  interact -q q_gpu -w 02:00:00      # 1 node, 2h on q_gpu
+  interact -n 4 -q q_large -w 12:00:00
 EOF
+}
+
+# Convert [DD:]HH:MM:SS to DonauKit time string (e.g. 1h30m, 36h10m10s)
+# DonauKit uses h/m/s units only, so days are folded into hours.
+parse_walltime() {
+    local input="$1"
+    local dd=0 hh mm ss
+    IFS=: read -r -a parts <<< "$input"
+    case ${#parts[@]} in
+        4) dd=$((10#${parts[0]})); hh=$((10#${parts[1]})); mm=$((10#${parts[2]})); ss=$((10#${parts[3]})) ;;
+        3) hh=$((10#${parts[0]})); mm=$((10#${parts[1]})); ss=$((10#${parts[2]})) ;;
+        *) echo "Invalid walltime format (expected [DD:]HH:MM:SS): $input" >&2; exit 1 ;;
+    esac
+    hh=$((dd * 24 + hh))
+    local result=""
+    [[ $hh -gt 0 ]] && result="${hh}h"
+    [[ $mm -gt 0 ]] && result="${result}${mm}m"
+    [[ $ss -gt 0 ]] && result="${result}${ss}s"
+    echo "$result"
 }
 
 NODES=$DEFAULT_NODES
 QUEUE=$DEFAULT_QUEUE
+WALLTIME=$DEFAULT_WALLTIME
 
-OPTS=$(getopt -o n:q:h --long nodes:,queue:,name:,rpn:,help,version -n "$(basename "$0")" -- "$@") || {
+OPTS=$(getopt -o n:q:w:h --long nodes:,queue:,walltime:,name:,rpn:,help,version -n "$(basename "$0")" -- "$@") || {
     echo "Try '$(basename "$0") --help' for more information." >&2
     exit 1
 }
@@ -43,23 +65,25 @@ eval set -- "$OPTS"
 
 while true; do
     case "$1" in
-        -n|--nodes)   NODES="$2";    shift 2 ;;
-        -q|--queue)   QUEUE="$2";    shift 2 ;;
-        --name)       JOB_NAME="$2"; shift 2 ;;
-        --rpn)        RPN="$2";      shift 2 ;;
-        -h|--help)    usage; exit 0 ;;
+        -n|--nodes)      NODES="$2";    shift 2 ;;
+        -q|--queue)      QUEUE="$2";    shift 2 ;;
+        -w|--walltime)   WALLTIME="$2"; shift 2 ;;
+        --name)          JOB_NAME="$2"; shift 2 ;;
+        --rpn)           RPN="$2";      shift 2 ;;
+        -h|--help)       usage; exit 0 ;;
         --version)
             echo "interact $VERSION"
             echo ""
             echo "Written by Qimen Xu."
             exit 0
             ;;
-        --)           shift; break ;;
-        *)            break ;;
+        --)              shift; break ;;
+        *)               break ;;
     esac
 done
 
-CMD=(dsub -n "$JOB_NAME" -nn "$NODES" -rpn "$RPN" -q "$QUEUE" -I bash)
-echo "Requesting interactive job: nodes=$NODES, queue=$QUEUE, rpn=$RPN, name=$JOB_NAME"
+DONAU_TIME=$(parse_walltime "$WALLTIME")
+CMD=(dsub -n "$JOB_NAME" -nn "$NODES" -rpn "$RPN" -q "$QUEUE" -T "$DONAU_TIME" -I bash)
+echo "Requesting interactive job: nodes=$NODES, queue=$QUEUE, walltime=$WALLTIME, rpn=$RPN, name=$JOB_NAME"
 echo "${CMD[*]}"
 exec "${CMD[@]}"
